@@ -1,0 +1,1191 @@
+<!DOCTYPE html>
+<html lang="zh-TW" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>段考資訊投影儀表板 - 即時自動存檔版</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0f9ff',
+                            500: '#0284c7',
+                            600: '#0369a1',
+                            700: '#075985',
+                        }
+                    },
+                    fontFamily: {
+                        mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'monospace']
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap');
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Microsoft JhengHei", sans-serif;
+            touch-action: manipulation;
+        }
+
+        /* 高對比模式 */
+        .high-contrast {
+            background-color: #000000 !important;
+            color: #ffffff !important;
+        }
+        .high-contrast .hc-card {
+            background-color: #000000 !important;
+            border: 3px solid #ffffff !important;
+            color: #ffffff !important;
+        }
+        .high-contrast .hc-text-yellow {
+            color: #ffff00 !important;
+        }
+        .high-contrast .hc-text-green {
+            color: #00ff00 !important;
+        }
+        .high-contrast .hc-text-red {
+            color: #ff3333 !important;
+        }
+        .high-contrast .hc-active-item {
+            border: 4px solid #ffff00 !important;
+            background-color: #1a1a1a !important;
+        }
+
+        /* 脈動警告動畫 */
+        @keyframes warning-pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.85; transform: scale(0.995); }
+        }
+        .animate-warning {
+            animation: warning-pulse 1.5s infinite ease-in-out;
+        }
+
+        /* 隱藏滾動條 */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        .editable-hover:hover {
+            outline: 2px dashed #38bdf8;
+            outline-offset: 4px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col justify-between transition-colors duration-300 select-none overflow-x-hidden">
+
+    <!-- 頂部功能列 -->
+    <header class="p-3 md:px-8 bg-slate-800/90 border-b border-slate-700/60 backdrop-blur-md flex flex-wrap justify-between items-center gap-3 z-20">
+        <div class="flex items-center gap-3">
+            <span class="p-2.5 bg-blue-600 rounded-xl text-white shadow-lg shadow-blue-500/30">
+                <i class="fa-solid fa-graduation-cap text-xl md:text-2xl"></i>
+            </span>
+            <div>
+                <div class="flex items-center gap-2">
+                    <h1 class="text-xl md:text-2xl font-black tracking-wide bg-gradient-to-r from-blue-400 to-teal-300 bg-clip-text text-transparent">
+                        段考資訊儀表板
+                    </h1>
+                    
+                    <!-- 【新升級】自動存檔與雲端狀態指示燈 -->
+                    <span id="autoSaveBadge" class="px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5 transition-all">
+                        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" id="autoSaveDot"></span>
+                        <span id="autoSaveText">🟢 已自動存檔</span>
+                    </span>
+                </div>
+                <p class="text-xs text-slate-400 hidden sm:block">即時自動存檔 (LocalStorage) ＋ 雲端即時同步 (Firebase)</p>
+            </div>
+        </div>
+
+        <!-- 中間 Day 1 / Day 2 快速切換頁籤 -->
+        <div class="flex bg-slate-900/80 p-1.5 rounded-2xl border border-slate-700/80 shadow-inner gap-1">
+            <button id="day1Btn" onclick="switchDay(1)" class="px-4 py-1.5 md:px-6 md:py-2 rounded-xl text-sm md:text-base font-black transition flex items-center gap-2 bg-blue-600 text-white shadow-md">
+                <i class="fa-solid fa-calendar-day"></i> Day 1
+            </button>
+            <button id="day2Btn" onclick="switchDay(2)" class="px-4 py-1.5 md:px-6 md:py-2 rounded-xl text-sm md:text-base font-black transition flex items-center gap-2 text-slate-400 hover:text-white">
+                <i class="fa-solid fa-calendar-days"></i> Day 2
+            </button>
+        </div>
+
+        <!-- 右側功能按鈕組 -->
+        <div class="flex items-center gap-2">
+            <!-- 音效開關 -->
+            <button id="soundToggleBtn" onclick="toggleSound()" class="px-3 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-200 transition font-semibold flex items-center gap-2 text-xs md:text-sm border border-slate-600">
+                <i id="soundIcon" class="fa-solid fa-volume-high text-emerald-400"></i>
+                <span id="soundText" class="hidden md:inline">提示音: 開</span>
+            </button>
+
+            <!-- 主題切換 -->
+            <button onclick="cycleTheme()" class="px-3 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-200 transition font-semibold flex items-center gap-2 text-xs md:text-sm border border-slate-600">
+                <i id="themeIcon" class="fa-solid fa-moon text-indigo-400"></i>
+                <span id="themeText" class="hidden md:inline">深色模式</span>
+            </button>
+
+            <!-- 全螢幕切換 -->
+            <button onclick="toggleFullScreen()" class="px-3 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-200 transition font-semibold flex items-center gap-2 text-xs md:text-sm border border-slate-600">
+                <i class="fa-solid fa-expand text-amber-400"></i>
+                <span class="hidden md:inline">全螢幕</span>
+            </button>
+
+            <!-- 面板展開/隱藏 -->
+            <button onclick="toggleControlPanel()" class="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold transition flex items-center gap-2 text-xs md:text-sm shadow-lg shadow-blue-600/30">
+                <i id="panelIcon" class="fa-solid fa-sliders"></i>
+                <span>考程與設定</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- 主要內容投影區 (大字卡區 + 側邊考程表) -->
+    <main class="flex-1 p-3 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-5 max-w-[1920px] mx-auto w-full">
+        
+        <!-- 左側主視角看板 (8 欄) -->
+        <div class="lg:col-span-8 flex flex-col gap-5 justify-between">
+            
+            <!-- 第一排：科目與時間卡片 -->
+            <div class="grid grid-cols-1 md:grid-cols-12 gap-5 items-stretch">
+                <!-- 當前科目卡片 -->
+                <div class="md:col-span-6 bg-slate-800/90 rounded-3xl p-5 md:p-6 border-2 border-slate-700/80 shadow-xl flex flex-col justify-center items-center text-center hc-card relative group">
+                    <div class="absolute top-3 left-4 text-slate-400 text-xs md:text-sm font-bold tracking-wider uppercase flex items-center gap-1.5">
+                        <i class="fa-solid fa-book-bookmark text-blue-400"></i> 當前考試科目
+                    </div>
+                    <!-- 點擊可直接修改科目名稱 -->
+                    <div id="subjectDisplay" onclick="quickEditSubject()" title="點擊直接修改科目名稱（自動存檔）" class="editable-hover text-5xl sm:text-6xl md:text-7xl font-black text-amber-400 tracking-wider my-3 hc-text-yellow drop-shadow-md rounded-2xl px-3 py-1">
+                        國文
+                    </div>
+                    <!-- 點擊可直接修改時間 -->
+                    <div id="examTimeRangeDisplay" onclick="quickEditTime()" title="點擊修改時間（自動存檔）" class="editable-hover text-base md:text-xl font-bold text-slate-300 bg-slate-900/70 px-5 py-1.5 rounded-full border border-slate-700/60 font-mono">
+                        08:40 - 09:30
+                    </div>
+                </div>
+
+                <!-- 當前標準時間卡片 -->
+                <div class="md:col-span-6 bg-slate-800/90 rounded-3xl p-5 md:p-6 border-2 border-slate-700/80 shadow-xl flex flex-col justify-center items-center text-center hc-card relative">
+                    <div class="absolute top-3 left-4 text-slate-400 text-xs md:text-sm font-bold tracking-wider uppercase flex items-center gap-1.5">
+                        <i class="fa-regular fa-clock text-teal-400"></i> 現在標準時間
+                    </div>
+                    <div id="currentTimeDisplay" class="text-5xl sm:text-6xl md:text-7xl font-extrabold font-mono text-slate-100 tracking-tight my-2 drop-shadow-lg">
+                        00:00:00
+                    </div>
+                    <div id="currentDateDisplay" class="text-xs md:text-base font-medium text-slate-400">
+                        2026年10月07日 星期三
+                    </div>
+                </div>
+            </div>
+
+            <!-- 第二排：倒數計時器與進度條 -->
+            <div id="timerCard" class="bg-slate-800/90 rounded-3xl p-6 md:p-8 border-2 border-slate-700/80 shadow-2xl flex flex-col items-center justify-center text-center hc-card relative transition-all duration-300">
+                <div class="w-full flex justify-between items-center mb-1 px-2">
+                    <div class="text-slate-400 text-xs md:text-base font-bold tracking-wider uppercase flex items-center gap-2">
+                        <i class="fa-solid fa-hourglass-half text-amber-400"></i> 考試剩餘時間
+                    </div>
+                    <div id="timerStatusBadge" class="px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                        進行中
+                    </div>
+                </div>
+
+                <!-- 倒數時間數字 -->
+                <div id="countdownDisplay" class="text-6xl sm:text-8xl md:text-9xl lg:text-[9.5rem] font-black font-mono text-emerald-400 tracking-tight my-1 hc-text-green drop-shadow-xl leading-none">
+                    50:00
+                </div>
+
+                <!-- 時間進度條 -->
+                <div class="w-full bg-slate-900/90 rounded-full h-5 md:h-7 p-1 border border-slate-700/80 overflow-hidden mt-3">
+                    <div id="progressBar" class="bg-gradient-to-r from-emerald-500 to-teal-400 h-full rounded-full transition-all duration-1000 w-full shadow-inner"></div>
+                </div>
+            </div>
+
+            <!-- 第三排：人數統計與考場注意事項 -->
+            <div class="grid grid-cols-1 md:grid-cols-12 gap-5">
+                <!-- 人數統計區 (7 欄) -->
+                <div class="md:col-span-7 grid grid-cols-3 gap-3 bg-slate-800/90 rounded-3xl p-4 border-2 border-slate-700/80 shadow-xl hc-card">
+                    <!-- 應到 -->
+                    <div class="flex flex-col items-center justify-center text-center">
+                        <span class="text-slate-400 text-xs md:text-sm font-bold">應到</span>
+                        <span id="displayTotal" class="text-3xl md:text-5xl font-black text-slate-100 font-mono my-0.5">35</span>
+                        <span class="text-[10px] md:text-xs text-slate-500 font-medium">全班</span>
+                    </div>
+                    <!-- 實到 -->
+                    <div class="flex flex-col items-center justify-center text-center border-x border-slate-700/60 px-2">
+                        <span class="text-slate-400 text-xs md:text-sm font-bold">實到</span>
+                        <span id="displayPresent" class="text-3xl md:text-5xl font-black text-emerald-400 font-mono my-0.5 hc-text-green">35</span>
+                        <span class="text-[10px] md:text-xs text-slate-500 font-medium">在教室</span>
+                    </div>
+                    <!-- 未到 -->
+                    <div class="flex flex-col items-center justify-center text-center">
+                        <span class="text-slate-400 text-xs md:text-sm font-bold">未到</span>
+                        <span id="displayAbsentCount" class="text-3xl md:text-5xl font-black text-rose-500 font-mono my-0.5 hc-text-red">0</span>
+                        <div id="displayAbsentList" class="text-[11px] md:text-xs font-bold text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded border border-rose-500/20 truncate max-w-full">
+                            無
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 注意事項 (5 欄) -->
+                <div class="md:col-span-5 bg-slate-800/90 rounded-3xl p-4 border-2 border-slate-700/80 shadow-xl flex flex-col justify-between hc-card">
+                    <div class="text-slate-400 text-xs md:text-sm font-bold flex items-center justify-between mb-1">
+                        <span class="flex items-center gap-1.5"><i class="fa-solid fa-bullhorn text-amber-400"></i> 注意事項</span>
+                        <span class="text-[10px] text-slate-500">(點擊編輯並自動存檔)</span>
+                    </div>
+                    <div id="noticeDisplay" onclick="quickEditNotice()" title="點擊修改注意事項" class="editable-hover text-xs md:text-sm font-semibold text-slate-200 leading-relaxed whitespace-pre-line bg-slate-900/60 p-2.5 rounded-2xl border border-slate-700/50 flex-1 flex items-center">
+                        1. 行動電話關機或靜音放置物區。
+2. 桌面僅留文具與證件。
+3. 15分後不得入場，30分後始得離場。
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- 右側今日全天考程表 Preview 區塊 (4 欄) -->
+        <div class="lg:col-span-4 bg-slate-800/90 rounded-3xl p-5 border-2 border-slate-700/80 shadow-xl flex flex-col justify-between hc-card">
+            <div>
+                <div class="flex justify-between items-center pb-3 border-b border-slate-700/80 mb-3">
+                    <div class="flex items-center gap-2">
+                        <i class="fa-solid fa-calendar-check text-blue-400 text-lg"></i>
+                        <h2 id="scheduleBoardTitle" class="text-lg font-black text-white">
+                            Day 1 今日全天考程
+                        </h2>
+                    </div>
+                    <span class="text-xs bg-slate-700 text-slate-300 font-bold px-2.5 py-1 rounded-full" id="scheduleCountTag">
+                        共 3 科
+                    </span>
+                </div>
+
+                <p class="text-xs text-slate-400 mb-3 flex items-center gap-1">
+                    <i class="fa-solid fa-circle-info text-teal-400"></i>
+                    點擊考程卡片可快速切換主畫面
+                </p>
+
+                <!-- 考程卡片動態清單容器 -->
+                <div id="scheduleListContainer" class="space-y-3 max-h-[550px] overflow-y-auto pr-1 no-scrollbar">
+                    <!-- JS 動態生成考程列表卡片 -->
+                </div>
+            </div>
+
+            <!-- 考程清單底層動作 -->
+            <div class="pt-3 border-t border-slate-700/80 mt-3 flex justify-between items-center text-xs text-slate-400">
+                <span class="flex items-center gap-1"><i class="fa-solid fa-rotate text-emerald-400"></i> 變更皆即時自動存檔</span>
+                <button onclick="toggleControlPanel()" class="text-blue-400 hover:text-blue-300 font-bold flex items-center gap-1">
+                    <i class="fa-solid fa-gear"></i> 管理日程
+                </button>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- 控制面板 (抽屜式 Drawer) -->
+    <div id="controlPanel" class="fixed inset-y-0 right-0 w-full sm:w-[520px] bg-slate-800 border-l border-slate-700 shadow-2xl z-50 transform translate-x-full transition-transform duration-300 ease-in-out p-6 overflow-y-auto no-scrollbar">
+        <div class="flex justify-between items-center pb-4 border-b border-slate-700 mb-5">
+            <h2 class="text-2xl font-black text-white flex items-center gap-2">
+                <i class="fa-solid fa-sliders text-blue-400"></i> 日程與雲端設定
+            </h2>
+            <button onclick="toggleControlPanel()" class="p-2 text-slate-400 hover:text-white rounded-xl hover:bg-slate-700 transition">
+                <i class="fa-solid fa-xmark text-2xl"></i>
+            </button>
+        </div>
+
+        <div class="space-y-6 text-slate-200">
+
+            <!-- Firebase 雲端同步與自動存檔狀態區 -->
+            <div class="bg-slate-900/90 p-4 rounded-2xl border-2 border-blue-500/40 space-y-3 shadow-lg">
+                <div class="flex justify-between items-center">
+                    <h3 class="text-base font-bold text-blue-400 flex items-center gap-2">
+                        <i class="fa-solid fa-cloud-arrow-up"></i> 雲端同步與即時自動存檔
+                    </h3>
+                    <span id="panelCloudBadge" class="text-xs px-2.5 py-1 rounded-full font-bold bg-slate-800 text-slate-400 border border-slate-700">
+                        未連線
+                    </span>
+                </div>
+
+                <p class="text-xs text-slate-400 leading-relaxed">
+                    此網頁具備<strong class="text-emerald-400">「即時自動存檔」</strong>功能，您的所有修改皆會自動寫入瀏覽器。若輸入考場代碼，更可跨裝置同步至手機或講台白板。
+                </p>
+
+                <div class="space-y-2">
+                    <label class="block text-xs font-semibold text-slate-300">雲端考場房間代碼</label>
+                    <div class="flex gap-2">
+                        <input type="text" id="roomIdInput" placeholder="例: 101-exam" class="flex-1 bg-slate-800 border border-slate-600 rounded-xl px-3 py-2 text-white font-mono text-sm focus:outline-none focus:border-blue-500">
+                        <button onclick="joinCloudRoom()" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-xs transition shadow-md">
+                            加入/載入
+                        </button>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2 pt-1">
+                    <button onclick="createNewCloudRoom()" class="py-2 px-3 bg-slate-800 hover:bg-slate-700 text-teal-300 font-bold rounded-xl border border-teal-500/40 text-xs transition flex items-center justify-center gap-1.5">
+                        <i class="fa-solid fa-plus-circle"></i> 建立隨機新房間
+                    </button>
+                    <button onclick="copyShareUrl()" class="py-2 px-3 bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold rounded-xl border border-amber-500/40 text-xs transition flex items-center justify-center gap-1.5">
+                        <i class="fa-solid fa-share-nodes"></i> 複製同步網址
+                    </button>
+                </div>
+
+                <div class="flex justify-between items-center pt-2 border-t border-slate-800 text-xs">
+                    <span class="text-slate-400 font-semibold">雲端同步模式</span>
+                    <button id="syncToggleBtn" onclick="toggleCloudSync()" class="px-3 py-1 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 font-bold">
+                        開啟中
+                    </button>
+                </div>
+            </div>
+
+            <!-- 天數切換與預設範本按鈕 -->
+            <div class="bg-slate-900/70 p-4 rounded-2xl border border-slate-700 space-y-3">
+                <div class="flex justify-between items-center">
+                    <h3 class="text-base font-bold text-amber-400 flex items-center gap-2">
+                        <i class="fa-solid fa-wand-magic-sparkles"></i> 考程範本重置
+                    </h3>
+                </div>
+                <button onclick="resetDefault2DaySchedules()" class="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-xl border border-slate-600 transition flex items-center justify-center gap-2 text-xs md:text-sm">
+                    <i class="fa-solid fa-rotate-left text-teal-400"></i> 重置為標準二日段考範例 (自動存檔)
+                </button>
+            </div>
+
+            <!-- 兩天考程列表編輯 (【即時存檔】) -->
+            <div class="bg-slate-900/70 p-4 rounded-2xl border border-slate-700 space-y-4">
+                <div class="flex justify-between items-center">
+                    <h3 class="text-base font-bold text-blue-400 flex items-center gap-2">
+                        <i class="fa-solid fa-list-ol"></i> 編輯 <span id="panelDayTitle" class="text-amber-400 font-extrabold">Day 1</span> 考程表
+                    </h3>
+                    <button onclick="addNewScheduleItem()" class="px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg text-xs flex items-center gap-1">
+                        <i class="fa-solid fa-plus"></i> 新增科目
+                    </button>
+                </div>
+
+                <!-- 考程編輯清單容器 -->
+                <div id="editorScheduleList" class="space-y-2.5">
+                    <!-- JS 動態渲染編輯輸入框，打字時自動觸發 oninput Auto-save -->
+                </div>
+            </div>
+
+            <!-- 考場人數與未到座號設定 -->
+            <div class="bg-slate-900/70 p-4 rounded-2xl border border-slate-700 space-y-3">
+                <h3 class="text-base font-bold text-emerald-400 flex items-center gap-2">
+                    <i class="fa-solid fa-users"></i> 考場人數管理 (即時自動存檔)
+                </h3>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-400 mb-1">全班應到人數</label>
+                        <input type="number" id="inputTotal" value="35" min="0" class="w-full bg-slate-800 border border-slate-600 rounded-xl px-3 py-2 text-white font-mono font-bold focus:outline-none focus:border-blue-500" oninput="handleAutoSaveInput()">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-400 mb-1">未到座號 (逗號隔開)</label>
+                        <input type="text" id="inputAbsentList" placeholder="例: 05, 18, 23" class="w-full bg-slate-800 border border-slate-600 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-blue-500" oninput="handleAutoSaveInput()">
+                    </div>
+                </div>
+            </div>
+
+            <!-- 注意事項編輯 -->
+            <div class="bg-slate-900/70 p-4 rounded-2xl border border-slate-700 space-y-3">
+                <h3 class="text-base font-bold text-purple-400 flex items-center gap-2">
+                    <i class="fa-solid fa-triangle-exclamation"></i> 注意事項編輯 (即時自動存檔)
+                </h3>
+                <textarea id="inputNotice" rows="3" class="w-full bg-slate-800 border border-slate-600 rounded-xl p-3 text-white text-xs focus:outline-none focus:border-blue-500 leading-relaxed" oninput="handleNoticeInput()"></textarea>
+            </div>
+
+            <!-- 測試音效按鈕 -->
+            <div>
+                <button onclick="playBeep(880, 0.3)" class="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold rounded-xl transition border border-slate-600 flex items-center justify-center gap-2 text-xs">
+                    <i class="fa-solid fa-bell"></i> 測試提示音效
+                </button>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Firebase SDK (ES Module) -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // 全域動態環境變數獲取與 Firebase 初始化
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'exam-dashboard-app';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' 
+            ? JSON.parse(__firebase_config) 
+            : {
+                apiKey: "AIzaSyBpPcA4voPnVu2DtyeLxKU3zDRSXCcIidc",
+                authDomain: "exam-cda8c.firebaseapp.com",
+                projectId: "exam-cda8c",
+                storageBucket: "exam-cda8c.firebasestorage.app",
+                messagingSenderId: "965116459198",
+                appId: "1:965116459198:web:b76f513e41c95b6e2006ef"
+            };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // 掛載全域 Firebase 控制物件
+        window.fb = {
+            db,
+            auth,
+            appId,
+            doc,
+            setDoc,
+            onSnapshot
+        };
+
+        // 登入驗證
+        async function initAuth() {
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+                console.log("Firebase Auth success, User UID:", auth.currentUser?.uid);
+            } catch (err) {
+                console.warn("Firebase Auth fallback or failed:", err);
+            }
+        }
+
+        initAuth();
+    </script>
+
+    <script>
+        // --- 本地自動存檔 LocalStorage 常數 Key ---
+        const LOCAL_STORAGE_KEY = 'EXAM_DASHBOARD_STATE_V2';
+
+        // --- 預設兩天考程資料結構 ---
+        const DEFAULT_SCHEDULES = {
+            1: [
+                { id: 1, subject: '國文', start: '08:40', end: '09:30' },
+                { id: 2, subject: '英語', start: '09:40', end: '10:30' },
+                { id: 3, subject: '自然', start: '10:40', end: '11:30' }
+            ],
+            2: [
+                { id: 4, subject: '數學', start: '08:40', end: '09:30' },
+                { id: 5, subject: '社會', start: '09:40', end: '10:30' },
+                { id: 6, subject: '寫作測驗', start: '10:40', end: '11:30' }
+            ]
+        };
+
+        // --- 全域狀態變數 ---
+        let schedulesData = JSON.parse(JSON.stringify(DEFAULT_SCHEDULES));
+        let currentDay = 1;
+        let currentSubject = '國文';
+        let startTimeStr = '08:40';
+        let endTimeStr = '09:30';
+
+        let soundEnabled = true;
+        let currentThemeIndex = 0;
+        const themes = ['dark', 'light', 'high-contrast'];
+
+        let hasPlayedStartBeep = false;
+        let hasPlayedEndBeep = false;
+        let hasPlayed5MinBeep = false;
+
+        let audioCtx = null;
+
+        // 雲端同步與防抖自動存檔 Timer
+        let currentRoomId = null;
+        let isCloudSyncActive = true;
+        let unsubscribeRoomListener = null;
+        let isSyncingFromCloud = false; // 防止接收雲端更新時再次觸發自動存檔寫回
+        let autoSaveDebounceTimer = null;
+
+        // --- 初始化頁面 ---
+        window.onload = function() {
+            // 優先從 LocalStorage 載入歷史自動存檔資料
+            loadStateFromLocalStorage();
+
+            renderScheduleBoard();
+            renderControlPanelEditor();
+            updateClock();
+            setInterval(updateClock, 1000);
+            updateAttendance();
+
+            // 檢查 URL query string 是否帶有 room id
+            const urlParams = new URLSearchParams(window.location.search);
+            const roomParam = urlParams.get('room');
+            if (roomParam) {
+                document.getElementById('roomIdInput').value = roomParam;
+                setTimeout(() => joinCloudRoom(roomParam), 1000);
+            }
+        };
+
+        // --- 【核心】即時自動存檔（Auto-Save & Auto-Sync Engine）---
+        // 任何資料變更時都會呼叫觸發 triggerAutoSave()
+        function triggerAutoSave() {
+            if (isSyncingFromCloud) return; // 雲端推送過來的資料，不重複儲存
+
+            // 1. UI 顯示「正在自動儲存...」
+            showAutoSaveStatus('saving');
+
+            // 2. 立即寫入 LocalStorage（零延遲本機持久化）
+            saveStateToLocalStorage();
+
+            // 3. 防抖 (Debounce 300ms) 寫入 Firebase 雲端資料庫
+            clearTimeout(autoSaveDebounceTimer);
+            autoSaveDebounceTimer = setTimeout(() => {
+                pushStateToCloud().then(() => {
+                    showAutoSaveStatus('saved');
+                }).catch(() => {
+                    showAutoSaveStatus('local-only');
+                });
+            }, 300);
+        }
+
+        // 本地 LocalStorage 儲存
+        function saveStateToLocalStorage() {
+            try {
+                const state = {
+                    schedulesData,
+                    currentDay,
+                    currentSubject,
+                    startTimeStr,
+                    endTimeStr,
+                    totalStudents: parseInt(document.getElementById('inputTotal').value) || 35,
+                    absentList: document.getElementById('inputAbsentList').value || '',
+                    noticeText: document.getElementById('noticeDisplay').innerText,
+                    savedAt: Date.now()
+                };
+                localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(state));
+            } catch (e) {
+                console.warn('LocalStorage Save Error:', e);
+            }
+        }
+
+        // 本地 LocalStorage 載入
+        function loadStateFromLocalStorage() {
+            try {
+                const savedRaw = localStorage.getItem(LOCAL_STORAGE_KEY);
+                if (savedRaw) {
+                    const data = JSON.parse(savedRaw);
+                    if (data.schedulesData) schedulesData = data.schedulesData;
+                    if (data.currentDay) currentDay = data.currentDay;
+                    if (data.currentSubject) currentSubject = data.currentSubject;
+                    if (data.startTimeStr) startTimeStr = data.startTimeStr;
+                    if (data.endTimeStr) endTimeStr = data.endTimeStr;
+
+                    if (data.totalStudents !== undefined) {
+                        document.getElementById('inputTotal').value = data.totalStudents;
+                    }
+                    if (data.absentList !== undefined) {
+                        document.getElementById('inputAbsentList').value = data.absentList;
+                    }
+                    if (data.noticeText !== undefined) {
+                        document.getElementById('noticeDisplay').innerText = data.noticeText;
+                        document.getElementById('inputNotice').value = data.noticeText;
+                    }
+
+                    document.getElementById('subjectDisplay').innerText = currentSubject;
+                    document.getElementById('examTimeRangeDisplay').innerText = `${startTimeStr} - ${endTimeStr}`;
+                    console.log("State loaded successfully from LocalStorage.");
+                }
+            } catch (e) {
+                console.warn('LocalStorage Load Error:', e);
+            }
+        }
+
+        // 更新頂部「自動存檔指示燈」UI
+        function showAutoSaveStatus(status) {
+            const badge = document.getElementById('autoSaveBadge');
+            const dot = document.getElementById('autoSaveDot');
+            const text = document.getElementById('autoSaveText');
+
+            if (status === 'saving') {
+                badge.className = 'px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1.5 transition-all';
+                dot.className = 'w-2 h-2 rounded-full bg-amber-400 animate-ping';
+                text.innerText = '🟡 正在自動存檔...';
+            } else if (status === 'saved') {
+                badge.className = 'px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1.5 transition-all';
+                dot.className = 'w-2 h-2 rounded-full bg-emerald-400 animate-pulse';
+                text.innerText = '🟢 已自動存檔';
+            } else if (status === 'local-only') {
+                badge.className = 'px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-blue-500/20 text-blue-300 border border-blue-500/40 flex items-center gap-1.5 transition-all';
+                dot.className = 'w-2 h-2 rounded-full bg-blue-400';
+                text.innerText = '⚪ 本地端自動存檔';
+            }
+        }
+
+        // --- Firebase 雲端房間邏輯 ---
+        function getRoomDocRef(roomId) {
+            if (!window.fb || !window.fb.db) return null;
+            const { db, appId, doc } = window.fb;
+            return doc(db, 'artifacts', appId, 'public', 'data', 'exam_rooms', roomId);
+        }
+
+        async function joinCloudRoom(targetRoomId = null) {
+            const roomId = targetRoomId || document.getElementById('roomIdInput').value.trim();
+            if (!roomId) {
+                alert('請輸入有效的考場房間代碼！');
+                return;
+            }
+
+            currentRoomId = roomId;
+            document.getElementById('roomIdInput').value = roomId;
+
+            updateCloudUIState('syncing');
+
+            if (unsubscribeRoomListener) {
+                unsubscribeRoomListener();
+                unsubscribeRoomListener = null;
+            }
+
+            const docRef = getRoomDocRef(roomId);
+            if (!docRef) {
+                console.error("Firebase not ready yet");
+                updateCloudUIState('offline');
+                return;
+            }
+
+            unsubscribeRoomListener = window.fb.onSnapshot(docRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    console.log("Received sync from Cloud Room:", data);
+                    
+                    isSyncingFromCloud = true;
+                    applyCloudDataToState(data);
+                    saveStateToLocalStorage();
+                    isSyncingFromCloud = false;
+
+                    updateCloudUIState('connected');
+                    showAutoSaveStatus('saved');
+                } else {
+                    console.log("Creating new cloud room...");
+                    pushStateToCloud();
+                    updateCloudUIState('connected');
+                }
+            }, (error) => {
+                console.error("Cloud listener error:", error);
+                updateCloudUIState('offline');
+            });
+        }
+
+        async function pushStateToCloud() {
+            if (!currentRoomId || !isCloudSyncActive || isSyncingFromCloud) return Promise.resolve();
+
+            const docRef = getRoomDocRef(currentRoomId);
+            if (!docRef) return Promise.reject();
+
+            const payload = {
+                currentDay,
+                currentSubject,
+                startTimeStr,
+                endTimeStr,
+                schedulesData,
+                totalStudents: parseInt(document.getElementById('inputTotal').value) || 35,
+                absentList: document.getElementById('inputAbsentList').value || '',
+                noticeText: document.getElementById('noticeDisplay').innerText,
+                updatedAt: Date.now()
+            };
+
+            return window.fb.setDoc(docRef, payload, { merge: true });
+        }
+
+        function applyCloudDataToState(data) {
+            if (data.schedulesData) schedulesData = data.schedulesData;
+            if (data.currentDay) currentDay = data.currentDay;
+            if (data.currentSubject) currentSubject = data.currentSubject;
+            if (data.startTimeStr) startTimeStr = data.startTimeStr;
+            if (data.endTimeStr) endTimeStr = data.endTimeStr;
+
+            if (data.totalStudents !== undefined) {
+                document.getElementById('inputTotal').value = data.totalStudents;
+            }
+            if (data.absentList !== undefined) {
+                document.getElementById('inputAbsentList').value = data.absentList;
+            }
+            if (data.noticeText !== undefined) {
+                document.getElementById('noticeDisplay').innerText = data.noticeText;
+                document.getElementById('inputNotice').value = data.noticeText;
+            }
+
+            document.getElementById('subjectDisplay').innerText = currentSubject;
+            document.getElementById('examTimeRangeDisplay').innerText = `${startTimeStr} - ${endTimeStr}`;
+
+            updateAttendance();
+            renderScheduleBoard();
+            renderControlPanelEditor();
+            updateClock();
+        }
+
+        function createNewCloudRoom() {
+            const randomCode = Math.floor(1000 + Math.random() * 9000).toString();
+            const roomId = `exam-${randomCode}`;
+            document.getElementById('roomIdInput').value = roomId;
+            joinCloudRoom(roomId);
+        }
+
+        function copyShareUrl() {
+            if (!currentRoomId) {
+                alert('請先加入或建立一個雲端房間！');
+                return;
+            }
+            const url = `${window.location.origin}${window.location.pathname}?room=${encodeURIComponent(currentRoomId)}`;
+            
+            const dummy = document.createElement('input');
+            document.body.appendChild(dummy);
+            dummy.value = url;
+            dummy.select();
+            document.execCommand('copy');
+            document.body.removeChild(dummy);
+
+            alert(`✅ 雲端同步連結已複製！\n您可以將此網址發送給手機或其他白板開啟：\n${url}`);
+        }
+
+        function toggleCloudSync() {
+            isCloudSyncActive = !isCloudSyncActive;
+            const btn = document.getElementById('syncToggleBtn');
+            if (isCloudSyncActive) {
+                btn.className = 'px-3 py-1 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 font-bold';
+                btn.innerText = '開啟中';
+                triggerAutoSave();
+            } else {
+                btn.className = 'px-3 py-1 rounded-lg bg-rose-500/20 text-rose-400 border border-rose-500/40 font-bold';
+                btn.innerText = '已暫停';
+            }
+        }
+
+        function updateCloudUIState(status) {
+            const panelBadge = document.getElementById('panelCloudBadge');
+
+            if (status === 'connected') {
+                panelBadge.className = 'text-xs px-2.5 py-1 rounded-full font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
+                panelBadge.innerText = `🟢 已雲端連線 (${currentRoomId})`;
+            } else if (status === 'syncing') {
+                panelBadge.className = 'text-xs px-2.5 py-1 rounded-full font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30';
+                panelBadge.innerText = '🟡 雲端連線中...';
+            } else {
+                panelBadge.className = 'text-xs px-2.5 py-1 rounded-full font-bold bg-slate-800 text-slate-400 border border-slate-700';
+                panelBadge.innerText = '⚪ 離線模式';
+            }
+        }
+
+        // --- 音效處理 ---
+        function playBeep(freq = 587.33, duration = 0.4) {
+            if (!soundEnabled) return;
+            try {
+                if (!audioCtx) {
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                if (audioCtx.state === 'suspended') {
+                    audioCtx.resume();
+                }
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+                
+                gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                osc.start();
+                osc.stop(audioCtx.currentTime + duration);
+            } catch (e) {
+                console.log("Audio error:", e);
+            }
+        }
+
+        function toggleSound() {
+            soundEnabled = !soundEnabled;
+            const icon = document.getElementById('soundIcon');
+            const text = document.getElementById('soundText');
+            if (soundEnabled) {
+                icon.className = 'fa-solid fa-volume-high text-emerald-400';
+                text.innerText = '提示音: 開';
+                playBeep(660, 0.2);
+            } else {
+                icon.className = 'fa-solid fa-volume-xmark text-rose-400';
+                text.innerText = '提示音: 關';
+            }
+        }
+
+        // 天數切換 (Day 1 / Day 2)
+        function switchDay(day) {
+            currentDay = day;
+            const btn1 = document.getElementById('day1Btn');
+            const btn2 = document.getElementById('day2Btn');
+
+            if (day === 1) {
+                btn1.className = 'px-4 py-1.5 md:px-6 md:py-2 rounded-xl text-sm md:text-base font-black transition flex items-center gap-2 bg-blue-600 text-white shadow-md';
+                btn2.className = 'px-4 py-1.5 md:px-6 md:py-2 rounded-xl text-sm md:text-base font-black transition flex items-center gap-2 text-slate-400 hover:text-white';
+            } else {
+                btn2.className = 'px-4 py-1.5 md:px-6 md:py-2 rounded-xl text-sm md:text-base font-black transition flex items-center gap-2 bg-blue-600 text-white shadow-md';
+                btn1.className = 'px-4 py-1.5 md:px-6 md:py-2 rounded-xl text-sm md:text-base font-black transition flex items-center gap-2 text-slate-400 hover:text-white';
+            }
+
+            document.getElementById('scheduleBoardTitle').innerText = `Day ${day} 今日全天考程`;
+            document.getElementById('panelDayTitle').innerText = `Day ${day}`;
+
+            const todaySchedules = schedulesData[day];
+            if (todaySchedules && todaySchedules.length > 0) {
+                selectScheduleItem(todaySchedules[0], false);
+            }
+
+            renderScheduleBoard();
+            renderControlPanelEditor();
+            triggerAutoSave();
+        }
+
+        // 主時鐘與倒數更新
+        function updateClock() {
+            const now = new Date();
+
+            const hrs = String(now.getHours()).padStart(2, '0');
+            const mins = String(now.getMinutes()).padStart(2, '0');
+            const secs = String(now.getSeconds()).padStart(2, '0');
+            document.getElementById('currentTimeDisplay').innerText = `${hrs}:${mins}:${secs}`;
+
+            const days = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const date = String(now.getDate()).padStart(2, '0');
+            const dayName = days[now.getDay()];
+            document.getElementById('currentDateDisplay').innerText = `${year}年${month}月${date}日 ${dayName}`;
+
+            updateCountdown(now);
+            renderScheduleBoard(now);
+        }
+
+        function updateCountdown(now) {
+            const startToday = new Date(now);
+            const [sHours, sMins] = startTimeStr.split(':').map(Number);
+            startToday.setHours(sHours, sMins, 0, 0);
+
+            const endToday = new Date(now);
+            const [eHours, eMins] = endTimeStr.split(':').map(Number);
+            endToday.setHours(eHours, eMins, 0, 0);
+
+            const countdownDisplay = document.getElementById('countdownDisplay');
+            const timerCard = document.getElementById('timerCard');
+            const progressBar = document.getElementById('progressBar');
+            const statusBadge = document.getElementById('timerStatusBadge');
+
+            const totalDuration = endToday - startToday;
+            const elapsed = now - startToday;
+            const remaining = endToday - now;
+
+            if (now < startToday) {
+                const diffSecs = Math.floor((startToday - now) / 1000);
+                const m = Math.floor(diffSecs / 60);
+                const s = diffSecs % 60;
+                countdownDisplay.innerText = `-${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+                
+                statusBadge.innerText = '尚未開始';
+                statusBadge.className = 'px-3 py-1 rounded-full text-xs font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30';
+                progressBar.style.width = '0%';
+                
+                countdownDisplay.className = 'text-6xl sm:text-8xl md:text-9xl lg:text-[9.5rem] font-black font-mono text-amber-400 tracking-tight my-1 hc-text-yellow drop-shadow-xl leading-none';
+                timerCard.classList.remove('animate-warning', 'border-rose-500/80');
+
+                hasPlayedStartBeep = false;
+                hasPlayedEndBeep = false;
+                hasPlayed5MinBeep = false;
+            }
+            else if (now >= startToday && now <= endToday) {
+                if (!hasPlayedStartBeep) {
+                    playBeep(880, 0.6);
+                    hasPlayedStartBeep = true;
+                }
+
+                const remSecs = Math.floor(remaining / 1000);
+                const m = Math.floor(remSecs / 60);
+                const s = remSecs % 60;
+                countdownDisplay.innerText = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+
+                const progressPercent = Math.min(100, Math.max(0, (elapsed / totalDuration) * 100));
+                progressBar.style.width = `${progressPercent}%`;
+
+                statusBadge.innerText = '考試進行中';
+                statusBadge.className = 'px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
+
+                if (remSecs <= 300) {
+                    countdownDisplay.className = 'text-6xl sm:text-8xl md:text-9xl lg:text-[9.5rem] font-black font-mono text-rose-500 tracking-tight my-1 hc-text-red drop-shadow-xl leading-none';
+                    progressBar.className = 'bg-gradient-to-r from-rose-600 to-amber-500 h-full rounded-full transition-all duration-1000 shadow-inner';
+                    timerCard.classList.add('animate-warning', 'border-rose-500/80');
+
+                    if (!hasPlayed5MinBeep) {
+                        playBeep(523.25, 0.4);
+                        hasPlayed5MinBeep = true;
+                    }
+                } else {
+                    countdownDisplay.className = 'text-6xl sm:text-8xl md:text-9xl lg:text-[9.5rem] font-black font-mono text-emerald-400 tracking-tight my-1 hc-text-green drop-shadow-xl leading-none';
+                    progressBar.className = 'bg-gradient-to-r from-emerald-500 to-teal-400 h-full rounded-full transition-all duration-1000 shadow-inner';
+                    timerCard.classList.remove('animate-warning', 'border-rose-500/80');
+                }
+            }
+            else {
+                if (!hasPlayedEndBeep) {
+                    playBeep(440, 0.8);
+                    hasPlayedEndBeep = true;
+                }
+
+                countdownDisplay.innerText = "00:00";
+                progressBar.style.width = '100%';
+                statusBadge.innerText = '考試已結束';
+                statusBadge.className = 'px-3 py-1 rounded-full text-xs font-bold bg-slate-500/20 text-slate-400 border border-slate-500/30';
+                
+                countdownDisplay.className = 'text-6xl sm:text-8xl md:text-9xl lg:text-[9.5rem] font-black font-mono text-slate-500 tracking-tight my-1 drop-shadow-xl leading-none';
+                timerCard.classList.remove('animate-warning', 'border-rose-500/80');
+            }
+        }
+
+        function renderScheduleBoard(now = new Date()) {
+            const container = document.getElementById('scheduleListContainer');
+            const todayList = schedulesData[currentDay] || [];
+
+            document.getElementById('scheduleCountTag').innerText = `共 ${todayList.length} 科`;
+
+            if (todayList.length === 0) {
+                container.innerHTML = `<div class="text-center text-slate-500 py-8 font-semibold">尚無考程，請點選「管理日程」新增。</div>`;
+                return;
+            }
+
+            container.innerHTML = '';
+
+            todayList.forEach((item, index) => {
+                const startToday = new Date(now);
+                const [sH, sM] = item.start.split(':').map(Number);
+                startToday.setHours(sH, sM, 0, 0);
+
+                const endToday = new Date(now);
+                const [eH, eM] = item.end.split(':').map(Number);
+                endToday.setHours(eH, eM, 0, 0);
+
+                let statusBadgeHTML = '';
+                let cardStyle = 'bg-slate-900/60 border-slate-700/60 opacity-80';
+
+                if (now >= startToday && now <= endToday) {
+                    statusBadgeHTML = `<span class="px-2 py-0.5 text-[10px] rounded-md font-extrabold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">進行中</span>`;
+                    cardStyle = 'bg-blue-900/40 border-blue-500/80 shadow-lg shadow-blue-500/20 hc-active-item ring-2 ring-blue-500/50';
+                } else if (now > endToday) {
+                    statusBadgeHTML = `<span class="px-2 py-0.5 text-[10px] rounded-md font-semibold bg-slate-800 text-slate-500">已結束</span>`;
+                    cardStyle = 'bg-slate-900/30 border-slate-800 opacity-50';
+                } else {
+                    statusBadgeHTML = `<span class="px-2 py-0.5 text-[10px] rounded-md font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">等待中</span>`;
+                    cardStyle = 'bg-slate-900/70 border-slate-700/80 hover:border-slate-600';
+                }
+
+                const isCurrentSelected = (item.subject === currentSubject && item.start === startTimeStr && item.end === endTimeStr);
+                if (isCurrentSelected && !(now >= startToday && now <= endToday)) {
+                    cardStyle += ' border-amber-500/80';
+                }
+
+                const card = document.createElement('div');
+                card.className = `p-3.5 rounded-2xl border transition duration-200 cursor-pointer flex justify-between items-center ${cardStyle}`;
+                card.onclick = () => selectScheduleItem(item, true);
+
+                card.innerHTML = `
+                    <div class="flex items-center gap-3">
+                        <span class="w-7 h-7 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 font-bold flex items-center justify-center text-xs">
+                            ${index + 1}
+                        </span>
+                        <div>
+                            <div class="font-extrabold text-base text-slate-100 flex items-center gap-2">
+                                ${item.subject}
+                                ${isCurrentSelected ? '<i class="fa-solid fa-play text-amber-400 text-xs"></i>' : ''}
+                            </div>
+                            <div class="text-xs font-mono text-slate-400 flex items-center gap-1 mt-0.5">
+                                <i class="fa-regular fa-clock text-[10px]"></i> ${item.start} - ${item.end}
+                            </div>
+                        </div>
+                    </div>
+                    <div>
+                        ${statusBadgeHTML}
+                    </div>
+                `;
+
+                container.appendChild(card);
+            });
+        }
+
+        function selectScheduleItem(item, shouldAutoSave = true) {
+            currentSubject = item.subject;
+            startTimeStr = item.start;
+            endTimeStr = item.end;
+
+            document.getElementById('subjectDisplay').innerText = currentSubject;
+            document.getElementById('examTimeRangeDisplay').innerText = `${startTimeStr} - ${endTimeStr}`;
+
+            hasPlayedStartBeep = false;
+            hasPlayedEndBeep = false;
+            hasPlayed5MinBeep = false;
+
+            updateClock();
+            if (shouldAutoSave) triggerAutoSave();
+        }
+
+        function renderControlPanelEditor() {
+            const container = document.getElementById('editorScheduleList');
+            const todayList = schedulesData[currentDay] || [];
+
+            container.innerHTML = '';
+
+            todayList.forEach((item, idx) => {
+                const row = document.createElement('div');
+                row.className = 'flex items-center gap-2 bg-slate-800 p-2 rounded-xl border border-slate-700';
+                row.innerHTML = `
+                    <input type="text" value="${item.subject}" oninput="updateScheduleItem(${idx}, 'subject', this.value)" placeholder="科目" class="w-1/3 bg-slate-900 border border-slate-600 rounded-lg px-2.5 py-1.5 text-xs text-white font-bold focus:outline-none">
+                    <input type="time" value="${item.start}" onchange="updateScheduleItem(${idx}, 'start', this.value)" class="w-1/3 bg-slate-900 border border-slate-600 rounded-lg px-2 py-1.5 text-xs text-white font-mono focus:outline-none">
+                    <input type="time" value="${item.end}" onchange="updateScheduleItem(${idx}, 'end', this.value)" class="w-1/3 bg-slate-900 border border-slate-600 rounded-lg px-2 py-1.5 text-xs text-white font-mono focus:outline-none">
+                    <button onclick="removeScheduleItem(${idx})" class="p-1.5 text-rose-400 hover:text-rose-300 hover:bg-rose-500/20 rounded-lg transition" title="刪除">
+                        <i class="fa-solid fa-trash-can text-xs"></i>
+                    </button>
+                `;
+                container.appendChild(row);
+            });
+        }
+
+        // 修改日程內容 -> 立即更新畫面 & 觸發自動存檔
+        function updateScheduleItem(index, key, value) {
+            schedulesData[currentDay][index][key] = value;
+            renderScheduleBoard();
+            triggerAutoSave();
+        }
+
+        function addNewScheduleItem() {
+            if (!schedulesData[currentDay]) schedulesData[currentDay] = [];
+            schedulesData[currentDay].push({
+                id: Date.now(),
+                subject: '新考科',
+                start: '13:00',
+                end: '13:50'
+            });
+            renderControlPanelEditor();
+            renderScheduleBoard();
+            triggerAutoSave();
+        }
+
+        function removeScheduleItem(index) {
+            schedulesData[currentDay].splice(index, 1);
+            renderControlPanelEditor();
+            renderScheduleBoard();
+            triggerAutoSave();
+        }
+
+        function resetDefault2DaySchedules() {
+            if (confirm('確定要將 Day 1 與 Day 2 重置為預設二日考程嗎？')) {
+                schedulesData = JSON.parse(JSON.stringify(DEFAULT_SCHEDULES));
+                switchDay(currentDay);
+            }
+        }
+
+        // 點擊看板快速修改科目（自動存檔）
+        function quickEditSubject() {
+            const newSub = prompt('請輸入新的科目名稱：', currentSubject);
+            if (newSub && newSub.trim() !== '') {
+                currentSubject = newSub.trim();
+                document.getElementById('subjectDisplay').innerText = currentSubject;
+                triggerAutoSave();
+            }
+        }
+
+        // 點擊看板快速修改時間（自動存檔）
+        function quickEditTime() {
+            const newStart = prompt('請輸入開始時間 (HH:MM)：', startTimeStr);
+            const newEnd = prompt('請輸入結束時間 (HH:MM)：', endTimeStr);
+            if (newStart && newEnd) {
+                startTimeStr = newStart.trim();
+                endTimeStr = newEnd.trim();
+                document.getElementById('examTimeRangeDisplay').innerText = `${startTimeStr} - ${endTimeStr}`;
+                updateClock();
+                triggerAutoSave();
+            }
+        }
+
+        // 點擊看板快速修改注意事項（自動存檔）
+        function quickEditNotice() {
+            const currentNotice = document.getElementById('noticeDisplay').innerText;
+            const newNotice = prompt('請修改考場注意事項（使用 \\n 換行）：', currentNotice);
+            if (newNotice !== null) {
+                document.getElementById('noticeDisplay').innerText = newNotice;
+                document.getElementById('inputNotice').value = newNotice;
+                triggerAutoSave();
+            }
+        }
+
+        function handleNoticeInput() {
+            const text = document.getElementById('inputNotice').value;
+            document.getElementById('noticeDisplay').innerText = text;
+            triggerAutoSave();
+        }
+
+        function handleAutoSaveInput() {
+            updateAttendance();
+            triggerAutoSave();
+        }
+
+        function updateAttendance() {
+            const total = parseInt(document.getElementById('inputTotal').value) || 0;
+            const absentInput = document.getElementById('inputAbsentList').value.trim();
+
+            let absentCount = 0;
+            let absentListText = '無';
+
+            if (absentInput.length > 0) {
+                const items = absentInput.split(/[,，\s]+/).filter(x => x.length > 0);
+                absentCount = items.length;
+                absentListText = items.join(', ');
+            }
+
+            const present = Math.max(0, total - absentCount);
+
+            document.getElementById('displayTotal').innerText = total;
+            document.getElementById('displayPresent').innerText = present;
+            document.getElementById('displayAbsentCount').innerText = absentCount;
+            document.getElementById('displayAbsentList').innerText = absentListText;
+        }
+
+        function toggleControlPanel() {
+            const panel = document.getElementById('controlPanel');
+            panel.classList.toggle('translate-x-full');
+        }
+
+        function toggleFullScreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(err => {
+                    console.log(`Error enabling full-screen: ${err.message}`);
+                });
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                }
+            }
+        }
+
+        function cycleTheme() {
+            currentThemeIndex = (currentThemeIndex + 1) % themes.length;
+            const theme = themes[currentThemeIndex];
+            const html = document.documentElement;
+            const body = document.body;
+            const icon = document.getElementById('themeIcon');
+            const text = document.getElementById('themeText');
+
+            html.classList.remove('dark', 'light');
+            body.classList.remove('high-contrast', 'bg-slate-900', 'bg-slate-100', 'text-slate-100', 'text-slate-900');
+
+            if (theme === 'dark') {
+                html.classList.add('dark');
+                body.classList.add('bg-slate-900', 'text-slate-100');
+                icon.className = 'fa-solid fa-moon text-indigo-400';
+                text.innerText = '深色模式';
+            } else if (theme === 'light') {
+                body.classList.add('bg-slate-100', 'text-slate-900');
+                icon.className = 'fa-solid fa-sun text-amber-500';
+                text.innerText = '淺色模式';
+            } else if (theme === 'high-contrast') {
+                body.classList.add('high-contrast');
+                icon.className = 'fa-solid fa-circle-half-stroke text-yellow-400';
+                text.innerText = '高對比模式';
+            }
+        }
+    </script>
+</body>
+</html>
